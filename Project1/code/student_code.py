@@ -16,7 +16,7 @@ import torch
 from torch.utils import data
 
 from utils import resize_image, load_image
-
+from PIL import Image
 # default list of interpolations
 _DEFAULT_INTERPOLATIONS = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC]
 
@@ -110,17 +110,18 @@ class Scale(object):
     """
     # sample interpolation method
     interpolation = random.sample(self.interpolations, 1)[0]
-
     # scale the image
     if isinstance(self.size, int):
-      #################################################################################
-      # Fill in the code here
-      #################################################################################
+      height, width, _ = img.shape
+      if width < height:
+        new_size = (self.size, int(self.size * height/width))
+      else:
+        new_size = (int(self.size * width/height), self.size)
+      img = resize_image(img, new_size, interpolation)
       return img
     else:
-      #################################################################################
-      # Fill in the code here
-      #################################################################################
+      new_size = self.size
+      img = resize_image(img, new_size, interpolation)    
       return img
 
   def __repr__(self):
@@ -177,6 +178,27 @@ class RandomSizedCrop(object):
       # note that there are two possibilities
       # crop the image and resize to output size
 
+      # aspect_ratio = width/height 
+      target_height = int(math.sqrt(target_area/aspect_ratio))
+      target_width = int(target_area/target_height)
+      #print(target_width, target_height)
+      if target_height <= img.shape[0] and target_width <= img.shape[1]:
+        img = img[0:target_height, :target_width, :]
+        im_scale = Scale(self.size, interpolations=self.interpolations)      
+        img = im_scale(img)
+        return img
+
+      # aspect_ratio = height/width
+      target_width = int(math.sqrt(target_area/aspect_ratio))
+      target_height = int(target_area/target_width)
+      #print(target_width, target_height)
+
+      if target_height <= img.shape[0] and target_width <= img.shape[1]:
+        img = img[0:target_height, :target_width, :]
+        im_scale = Scale(self.size, interpolations=self.interpolations)      
+        img = im_scale(img)
+        return img
+
     # Fall back
     if isinstance(self.size, int):
       im_scale = Scale(self.size, interpolations=self.interpolations)
@@ -186,6 +208,10 @@ class RandomSizedCrop(object):
       #################################################################################
       # with a square sized output, the default is to crop the patch in the center
       # (after all trials fail)
+      height, width = img.shape[0], img.shape[1]
+      x = width//2 - self.size//2
+      y = height//2 - self.size//2
+      img = img[y:y+height, x:x+width]
       return img
     else:
       # with a pre-specified output size, the default crop is the image itself
@@ -220,6 +246,10 @@ class RandomColor(object):
     #################################################################################
     # Fill in the code here
     #################################################################################
+    alpha = random.uniform(-self.color_range, self.color_range)
+    img[:,:,0] = img[:,:,0] * (1 + alpha)
+    img[:,:,1] = img[:,:,1] * (1 + alpha)
+    img[:,:,2] = img[:,:,2] * (1 + alpha)
     return img
 
   def __repr__(self):
@@ -253,6 +283,39 @@ class RandomRotate(object):
     # Fill in the code here
     #################################################################################
     # get the max rectangular within the rotated image
+    pil_img = Image.fromarray(img)
+    pil_img = pil_img.rotate(degree)
+    img = np.array(pil_img)
+
+    radians = math.radians(degree)
+    quadrant = int(math.floor(radians/(math.pi/2))) & 3
+    if (quadrant & 1) == 0:
+      sign_alpha = radians
+    else:
+      sign_alpha = math.pi - math.pi
+    alpha = ((sign_alpha % math.pi) + math.pi) % math.pi
+    bb = {
+        "width": img.shape[1] * math.cos(alpha) + img.shape[0] * math.sin(alpha),
+        "height": img.shape[1]* math.sin(alpha) + img.shape[0] * math.cos(alpha)
+    }
+    if img.shape[1] < img.shape[0]:
+      gamma = math.atan2(bb["width"], bb["height"])
+    else:
+      gamma = math.atan2(bb["height"], bb["width"])
+
+    delta = math.pi - alpha - gamma
+
+    if img.shape[1] < img.shape[0] :
+     length = img.shape[0]
+    else:
+      length = img.shape[1]
+    d = length * math.cos(alpha);
+    a = d * math.sin(alpha) / math.sin(delta);
+
+    y = int(a * math.cos(gamma));
+    x = int(y * math.tan(gamma));
+    print(y, (bb["height"] - 2 * y), x, (bb["width"] - 2 * x))
+    img = img[y : int((bb["height"] - 2 * y)), x : int((bb["width"] - 2 * x))]
     return img
 
   def __repr__(self):
