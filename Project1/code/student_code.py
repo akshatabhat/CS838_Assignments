@@ -178,40 +178,51 @@ class RandomSizedCrop(object):
       # note that there are two possibilities
       # crop the image and resize to output size
 
+      width = img.shape[1]
+      height = img.shape[0]
+      #print("width=%d, height=%d " %(width, height))
+
+      x = random.randint(0, width-1)
+      y = random.randint(0, height-1)
+
+      #print("x=%d, y=%d" % (x, y))
+      
       # aspect_ratio = width/height 
       target_height = int(math.sqrt(target_area/aspect_ratio))
       target_width = int(target_area/target_height)
-      #print(target_width, target_height)
-      if target_height <= img.shape[0] and target_width <= img.shape[1]:
-        img = img[0:target_height, :target_width, :]
-        im_scale = Scale(self.size, interpolations=self.interpolations)      
-        img = im_scale(img)
-        return img
+      #print("target width=%d, target height=%d " %(target_width, target_height))
+      
+      if (y+target_height) <= height and (x+target_width) <= width:
+        new_img = img[y:y+target_height, x:x+target_width, :]
+        im_scale = Scale((self.size, self.size), interpolations=self.interpolations)      
+        new_img = im_scale(new_img)
+        return new_img
 
       # aspect_ratio = height/width
       target_width = int(math.sqrt(target_area/aspect_ratio))
       target_height = int(target_area/target_width)
-      #print(target_width, target_height)
-
-      if target_height <= img.shape[0] and target_width <= img.shape[1]:
-        img = img[0:target_height, :target_width, :]
-        im_scale = Scale(self.size, interpolations=self.interpolations)      
-        img = im_scale(img)
-        return img
+      #print("target width=%d, target height=%d " %(target_width, target_height))
+      
+      if (y+target_height) <= height and (x+target_width) <= width:
+        new_img = img[y:y+target_height, x:x+target_width, :]
+        im_scale = Scale((self.size, self.size), interpolations=self.interpolations)      
+        new_img = im_scale(new_img)
+        return new_img
 
     # Fall back
     if isinstance(self.size, int):
-      im_scale = Scale(self.size, interpolations=self.interpolations)
+      #print("fallback center")
+      im_scale = Scale((self.size, self.size), interpolations=self.interpolations)
       img = im_scale(img)
       #################################################################################
       # Fill in the code here
       #################################################################################
       # with a square sized output, the default is to crop the patch in the center
       # (after all trials fail)
-      height, width = img.shape[0], img.shape[1]
-      x = width//2 - self.size//2
-      y = height//2 - self.size//2
-      img = img[y:y+height, x:x+width]
+      #height, width = img.shape[0], img.shape[1]
+      #x = width//2 - self.size//2
+      #y = height//2 - self.size//2
+      #img = img[y:y+height, x:x+width]
       return img
     else:
       # with a pre-specified output size, the default crop is the image itself
@@ -248,8 +259,13 @@ class RandomColor(object):
     #################################################################################
     alpha = random.uniform(-self.color_range, self.color_range)
     img[:,:,0] = img[:,:,0] * (1 + alpha)
+
+    alpha = random.uniform(-self.color_range, self.color_range)
     img[:,:,1] = img[:,:,1] * (1 + alpha)
+
+    alpha = random.uniform(-self.color_range, self.color_range)
     img[:,:,2] = img[:,:,2] * (1 + alpha)
+    # TODO: Prerformance Improvement
     return img
 
   def __repr__(self):
@@ -292,7 +308,7 @@ class RandomRotate(object):
     if (quadrant & 1) == 0:
       sign_alpha = radians
     else:
-      sign_alpha = math.pi - math.pi
+      sign_alpha = math.pi - radians
     alpha = ((sign_alpha % math.pi) + math.pi) % math.pi
     bb = {
         "width": img.shape[1] * math.cos(alpha) + img.shape[0] * math.sin(alpha),
@@ -314,9 +330,11 @@ class RandomRotate(object):
 
     y = int(a * math.cos(gamma));
     x = int(y * math.tan(gamma));
-    print(y, (bb["height"] - 2 * y), x, (bb["width"] - 2 * x))
-    img = img[y : int((bb["height"] - 2 * y)), x : int((bb["width"] - 2 * x))]
-    return img
+    #print(y, (bb["height"] - 2 * y), x, (bb["width"] - 2 * x))
+    new_img = img[y : int((bb["height"] - 2 * y)), x : int((bb["width"] - 2 * x))]
+    im_scale = Scale((img.shape[1], img.shape[0]), interpolations=self.interpolations)
+    new_img = im_scale(new_img)
+    return new_img
 
   def __repr__(self):
     return "Random Rotation [Range {:.2f} - {:.2f} Degree]".format(
