@@ -245,7 +245,6 @@ class RandomColor(object):
 
     alpha = random.uniform(-self.color_range, self.color_range)
     new_img[:,:,2] = img[:,:,2] * (1 + alpha)
-    # TODO: Prerformance Improvement
     return new_img
 
   def __repr__(self):
