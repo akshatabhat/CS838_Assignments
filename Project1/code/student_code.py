@@ -20,11 +20,6 @@ from PIL import Image
 # default list of interpolations
 _DEFAULT_INTERPOLATIONS = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC]
 
-#################################################################################
-# These are helper functions or functions for demonstration
-# You won't need to modify them
-#################################################################################
-
 class Compose(object):
   """Composes several transforms together.
 
@@ -71,9 +66,6 @@ class RandomHorizontalFlip(object):
   def __repr__(self):
     return "Random Horizontal Flip"
 
-#################################################################################
-# You will need to fill in the missing code in these classes
-#################################################################################
 class Scale(object):
   """Rescale the input numpy array to the given size.
 
@@ -171,13 +163,6 @@ class RandomSizedCrop(object):
       target_area = random.uniform(self.area_range[0], self.area_range[1]) * area
       aspect_ratio = random.uniform(self.ratio_range[0], self.ratio_range[1])
 
-      #################################################################################
-      # Fill in the code here
-      #################################################################################
-      # compute the width and height
-      # note that there are two possibilities
-      # crop the image and resize to output size
-
       width = img.shape[1]
       height = img.shape[0]
       #print("width=%d, height=%d " %(width, height))
@@ -194,7 +179,10 @@ class RandomSizedCrop(object):
       
       if (y+target_height) <= height and (x+target_width) <= width:
         new_img = img[y:y+target_height, x:x+target_width, :]
-        im_scale = Scale((self.size, self.size), interpolations=self.interpolations)      
+        if isinstance(self.size, int):
+          im_scale = Scale((self.size, self.size), interpolations=self.interpolations)      
+        else:
+          im_scale = Scale(self.size, interpolations=self.interpolations)
         new_img = im_scale(new_img)
         return new_img
 
@@ -205,7 +193,10 @@ class RandomSizedCrop(object):
       
       if (y+target_height) <= height and (x+target_width) <= width:
         new_img = img[y:y+target_height, x:x+target_width, :]
-        im_scale = Scale((self.size, self.size), interpolations=self.interpolations)      
+        if isinstance(self.size, int):
+          im_scale = Scale((self.size, self.size), interpolations=self.interpolations)
+        else:
+          im_scale = Scale(self.size, interpolations=self.interpolations)
         new_img = im_scale(new_img)
         return new_img
 
@@ -214,15 +205,6 @@ class RandomSizedCrop(object):
       #print("fallback center")
       im_scale = Scale((self.size, self.size), interpolations=self.interpolations)
       img = im_scale(img)
-      #################################################################################
-      # Fill in the code here
-      #################################################################################
-      # with a square sized output, the default is to crop the patch in the center
-      # (after all trials fail)
-      #height, width = img.shape[0], img.shape[1]
-      #x = width//2 - self.size//2
-      #y = height//2 - self.size//2
-      #img = img[y:y+height, x:x+width]
       return img
     else:
       # with a pre-specified output size, the default crop is the image itself
@@ -254,19 +236,17 @@ class RandomColor(object):
     self.color_range = color_range
 
   def __call__(self, img):
-    #################################################################################
-    # Fill in the code here
-    #################################################################################
+    new_img = np.array(img, copy=True)
     alpha = random.uniform(-self.color_range, self.color_range)
-    img[:,:,0] = img[:,:,0] * (1 + alpha)
+    new_img[:,:,0] = img[:,:,0] * (1 + alpha)
 
     alpha = random.uniform(-self.color_range, self.color_range)
-    img[:,:,1] = img[:,:,1] * (1 + alpha)
+    new_img[:,:,1] = img[:,:,1] * (1 + alpha)
 
     alpha = random.uniform(-self.color_range, self.color_range)
-    img[:,:,2] = img[:,:,2] * (1 + alpha)
+    new_img[:,:,2] = img[:,:,2] * (1 + alpha)
     # TODO: Prerformance Improvement
-    return img
+    return new_img
 
   def __repr__(self):
     return "Random Color [Range {:.2f} - {:.2f}%]".format(
@@ -295,13 +275,12 @@ class RandomRotate(object):
     if np.abs(degree) <= 1.0:
       return img
 
-    #################################################################################
-    # Fill in the code here
-    #################################################################################
-    # get the max rectangular within the rotated image
     pil_img = Image.fromarray(img)
     pil_img = pil_img.rotate(degree)
     img = np.array(pil_img)
+
+    width = img.shape[1]
+    height = img.shape[0]
 
     radians = math.radians(degree)
     quadrant = int(math.floor(radians/(math.pi/2))) & 3
@@ -311,38 +290,53 @@ class RandomRotate(object):
       sign_alpha = math.pi - radians
     alpha = ((sign_alpha % math.pi) + math.pi) % math.pi
     bb = {
-        "width": img.shape[1] * math.cos(alpha) + img.shape[0] * math.sin(alpha),
-        "height": img.shape[1]* math.sin(alpha) + img.shape[0] * math.cos(alpha)
+        "width": width * math.cos(alpha) + height * math.sin(alpha),
+        "height": width * math.sin(alpha) + height * math.cos(alpha)
     }
-    if img.shape[1] < img.shape[0]:
+    if width < height:
       gamma = math.atan2(bb["width"], bb["height"])
     else:
       gamma = math.atan2(bb["height"], bb["width"])
 
     delta = math.pi - alpha - gamma
 
-    if img.shape[1] < img.shape[0] :
-     length = img.shape[0]
+    if width < height :
+     length = height
     else:
-      length = img.shape[1]
+      length = width
+
     d = length * math.cos(alpha);
     a = d * math.sin(alpha) / math.sin(delta);
-
     y = int(a * math.cos(gamma));
     x = int(y * math.tan(gamma));
-    #print(y, (bb["height"] - 2 * y), x, (bb["width"] - 2 * x))
-    new_img = img[y : int((bb["height"] - 2 * y)), x : int((bb["width"] - 2 * x))]
-    im_scale = Scale((img.shape[1], img.shape[0]), interpolations=self.interpolations)
-    new_img = im_scale(new_img)
-    return new_img
+
+    def crop_around_center(image, width, height):
+      """
+      Given a NumPy / OpenCV 2 image, crops it to the given width and height,
+      around it's centre point
+      """
+
+      image_size = (image.shape[1], image.shape[0])
+      image_center = (int(image_size[0] * 0.5), int(image_size[1] * 0.5))
+
+      if(width > image_size[0]):
+          width = image_size[0]
+
+      if(height > image_size[1]):
+          height = image_size[1]
+
+      x1 = int(image_center[0] - width * 0.5)
+      x2 = int(image_center[0] + width * 0.5)
+      y1 = int(image_center[1] - height * 0.5)
+      y2 = int(image_center[1] + height * 0.5)
+
+      return image[y1:y2, x1:x2]
+    return crop_around_center(img, bb["width"] - 2 * x, bb["height"] - 2 * y)  
 
   def __repr__(self):
     return "Random Rotation [Range {:.2f} - {:.2f} Degree]".format(
             -self.degree_range, self.degree_range)
 
-#################################################################################
-# Additional helper functions
-#################################################################################
 class ToTensor(object):
   """Convert a ``numpy.ndarray`` image to tensor.
   Converts a numpy.ndarray (H x W x C) image in the range
